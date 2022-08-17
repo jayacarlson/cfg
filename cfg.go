@@ -25,7 +25,7 @@ var (
 	ErrIllegalDataBlock = errors.New("Illegal ConfigData() -- no leading TAB")
 
 	// 1: label  2: ,  3: <|[|{|(  4: .*
-	findConfigStRex = regexp.MustCompile(`(?ms).*?^(\w+) *(,)* *(<|\[|{|\() *\n(.*)`)
+	findConfigStRex = regexp.MustCompile(`(?ms).*?^(\w+)[ \t]*(,)*[ \t]*(<|\[|{|\()[ \t]*\n(.*)`)
 	// 1: -contents-  2: >|]|}|)  3: .*
 	findConfigEnRex = regexp.MustCompile(`(?ms)(.*?)\n^(>|\]|}|\))((\n|$).*)`)
 
@@ -38,28 +38,28 @@ var (
 
 	// label := value
 	// 1: label  2: value  3: remaining
-	findConfigValueRex = regexp.MustCompile(`(?ms).*?^(\w+) *:= *(.*?) *\n(.*)`)
+	findConfigValueRex = regexp.MustCompile(`(?ms).*?^(\w+)[ \t]*:=[ \t]*(.*?)[ \t]*\n(.*)`)
 
 	// label < ... >
 	// 1: label  2: -blockData-  3: remaining
-	findConfigBlockRex = regexp.MustCompile(`(?ms).*?^(\w+) *<\n(.*?)\n>((\n|$).*)`)
+	findConfigBlockRex = regexp.MustCompile(`(?ms).*?^(\w+)[ \t]*<\n(.*?)\n>((\n|$).*)`)
 
 	// label [ ... ]
 	// 1: label  2: -lineData-  3: remaining
-	findConfigLinesRex = regexp.MustCompile(`(?ms).*?^(\w+) *\[\n(.*?)\n\]((\n|$).*)`)
+	findConfigLinesRex = regexp.MustCompile(`(?ms).*?^(\w+)[ \t]*\[\n(.*?)\n\]((\n|$).*)`)
 
 	// label , { ... }
 	// 1: label  2: ,  3: -listData-  4: remaining  -- #2 may be empty or a comma
-	findConfigItemsRex = regexp.MustCompile(`(?ms).*?^(\w+) *(,)* *{\n(.*?)\n}((\n|$).*)`)
+	findConfigItemsRex = regexp.MustCompile(`(?ms).*?^(\w+)[ \t]*(,)*[ \t]*{\n(.*?)\n}((\n|$).*)`)
 
 	// 1: label 2: remaining
-	dictRex = regexp.MustCompile(`^(\w+) *: *(.*)`)
+	dictRex = regexp.MustCompile(`^(\w+)[ \t]*:[ \t]*(.*)`)
 )
 
 func StringListToDict(l []string) map[string]string {
 	result := make(map[string]string)
 	for _, v := range l {
-		if x := dictRex.FindStringSubmatch(v); x != nil {
+		if x := dictRex.FindStringSubmatch(v); nil != x {
 			result[x[1]] = x[2]
 		}
 	}
@@ -77,7 +77,7 @@ func StringListToDict(l []string) map[string]string {
 	removed.  The 'value' could be empty, e.g. "label :="
 */
 func HandleConfigValues(str string, f func(label, value string)) {
-	for x := findConfigValueRex.FindStringSubmatch(str); x != nil; x = findConfigValueRex.FindStringSubmatch(x[3]) {
+	for x := findConfigValueRex.FindStringSubmatch(str); nil != x; x = findConfigValueRex.FindStringSubmatch(x[3]) {
 		f(x[1], x[2])
 	}
 }
@@ -114,7 +114,7 @@ func HandleConfigValues(str string, f func(label, value string)) {
 	Then called with ("blockData2", "\t# block data\n\tmore stuff...")
 */
 func HandleConfigBlocks(str string, f func(label, block string)) {
-	for x := findConfigBlockRex.FindStringSubmatch(str); x != nil; x = findConfigBlockRex.FindStringSubmatch(x[3]) {
+	for x := findConfigBlockRex.FindStringSubmatch(str); nil != x; x = findConfigBlockRex.FindStringSubmatch(x[3]) {
 		f(x[1], x[2])
 	}
 }
@@ -154,7 +154,7 @@ func HandleConfigBlocks(str string, f func(label, block string)) {
 	Then called with ("lineData2", []string{"foo: bar, boo","goo, faz: gar"})
 */
 func HandleConfigLines(str string, f func(label string, lines []string)) {
-	for x := findConfigLinesRex.FindStringSubmatch(str); x != nil; x = findConfigLinesRex.FindStringSubmatch(x[3]) {
+	for x := findConfigLinesRex.FindStringSubmatch(str); nil != x; x = findConfigLinesRex.FindStringSubmatch(x[3]) {
 		f(x[1], txt.ListToStringSlice(x[2]))
 	}
 }
@@ -198,7 +198,7 @@ func HandleConfigLines(str string, f func(label string, lines []string)) {
 	Then called with ("listData2", []string{"item2.1","item2.2"})
 */
 func HandleConfigItems(str string, f func(label string, list []string)) {
-	for x := findConfigItemsRex.FindStringSubmatch(str); x != nil; x = findConfigItemsRex.FindStringSubmatch(x[4]) {
+	for x := findConfigItemsRex.FindStringSubmatch(str); nil != x; x = findConfigItemsRex.FindStringSubmatch(x[4]) {
 		if "" == x[2] {
 			x[2] = " "
 		}
@@ -245,37 +245,49 @@ func HandleConfigData(str string, f func(t ConfigType, label string, data []stri
 /*
 	Reads the config file and passes returned name := value pairs to handler
 */
-func LoadConfigValues(flPath string, f func(label, value string)) {
+func LoadConfigValues(flPath string, f func(label, value string)) error {
 	data, err := ioutil.ReadFile(flPath)
-	dbg.ChkErrX(err, "Failed to read config file: %s (%v)", flPath, err)
+	if dbg.ChkErr(err, "Failed to read config file: %s (%v)", flPath, err) {
+		return err
+	}
 	HandleConfigValues(string(data), f)
+	return nil
 }
 
 /*
 	Reads the config file and passes returned block data to handler
 */
-func LoadConfigBlocks(flPath string, f func(label, data string)) {
+func LoadConfigBlocks(flPath string, f func(label, data string)) error {
 	data, err := ioutil.ReadFile(flPath)
-	dbg.ChkErrX(err, "Failed to read config file: %s (%v)", flPath, err)
+	if dbg.ChkErr(err, "Failed to read config file: %s (%v)", flPath, err) {
+		return err
+	}
 	HandleConfigBlocks(string(data), f)
+	return nil
 }
 
 /*
 	Reads the config file and passes returned line data to handler
 */
-func LoadConfigLines(flPath string, f func(label string, data []string)) {
+func LoadConfigLines(flPath string, f func(label string, data []string)) error {
 	data, err := ioutil.ReadFile(flPath)
-	dbg.ChkErrX(err, "Failed to read config file: %s (%v)", flPath, err)
+	if dbg.ChkErr(err, "Failed to read config file: %s (%v)", flPath, err) {
+		return err
+	}
 	HandleConfigLines(string(data), f)
+	return nil
 }
 
 /*
 	Reads the config file and passes returned list data to handler
 */
-func LoadConfigItems(flPath string, f func(label string, data []string)) {
+func LoadConfigItems(flPath string, f func(label string, data []string)) error {
 	data, err := ioutil.ReadFile(flPath)
-	dbg.ChkErrX(err, "Failed to read config file: %s (%v)", flPath, err)
+	if dbg.ChkErr(err, "Failed to read config file: %s (%v)", flPath, err) {
+		return err
+	}
 	HandleConfigItems(string(data), f)
+	return nil
 }
 
 /*
@@ -283,7 +295,9 @@ func LoadConfigItems(flPath string, f func(label string, data []string)) {
 */
 func LoadConfigData(flPath string, f func(t ConfigType, label string, data []string)) error {
 	data, err := ioutil.ReadFile(flPath)
-	dbg.ChkErrX(err, "Failed to read config file: %s (%v)", flPath, err)
+	if dbg.ChkErr(err, "Failed to read config file: %s (%v)", flPath, err) {
+		return err
+	}
 	return handleConfigData("", string(data), f)
 }
 
